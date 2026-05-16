@@ -1,0 +1,7 @@
+backend-go/.env
+
+frondend-app/.dart_tool/
+frondend-app/.build/
+frondend-app/build/
+frondend-app/*.apk
+**/constants.dart
