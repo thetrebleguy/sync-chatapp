@@ -23,6 +23,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isUploading = false;
   String? _uploadedFileUrl;
 
+  List<dynamic> _experts = [];
+  bool _isLoadingExperts = true;
+
   final SocketService _socketService = SocketService();
 
   // initial state
@@ -30,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchUserData();
+    _fetchExperts();
 
     _socketService.connect();
     _socketService.channel.stream.listen((message) {
@@ -174,6 +178,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _submitToDatabase(String expertId) async {
+    if (_uploadedFileUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Warning: Please upload your resume to the vault first",
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final userId = await storage.read(key: 'user_id');
+
+      final response = await http.post(
+        Uri.parse("${API.baseUrl}/submit-cv"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "student_id": userId,
+          "expert_id": expertId,
+          "file_url": _uploadedFileUrl,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Submission is sent!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        print("DB Submission Failed: ${response.body}");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to Submit"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error executing database submit bridge: $e");
+    }
+  }
+
+  Future<void> _fetchExperts() async {
+    try {
+      final response = await http.get(Uri.parse("${API.baseUrl}/experts"));
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _experts = jsonDecode(response.body);
+          _isLoadingExperts = false;
+        });
+      } else {
+        print("Failed to load experts: ${response.statusCode}");
+        setState(() {
+          _isLoadingExperts = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching expert list: $e");
+      setState(() {
+        _isLoadingExperts = false;
+      });
+    }
+  }
+
   Widget _buildUploadCard() {
     return Card(
       elevation: 0,
@@ -241,7 +314,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   )
                 : SizedBox(
                     width: double.infinity,
-                    child: _selectedFile == null
+                    child: _uploadedFileUrl != null
+                        ? Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEDF5FD),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFDCE6F1),
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFF01754F),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  "CV Saved! Select an Expert Below",
+                                  style: TextStyle(
+                                    color: Color(0xFF0A66C2),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _selectedFile == null
                         ? SizedBox(
                             height: 48,
                             child: ElevatedButton.icon(
@@ -258,9 +359,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               label: const Text("Select PDF Resume"),
                             ),
                           )
-                        : Row(
+                        : // STEP 3: Local file selected, but not uploaded up to the Go backend yet
+                          Row(
                             children: [
-                              // Left Action: Reset / Change selected local file
                               Expanded(
                                 flex: 2,
                                 child: SizedBox(
@@ -276,13 +377,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                    icon: const Icon(Icons.refresh, size: 18),
+                                    icon: const Icon(Icons.refresh, size: 16),
                                     label: const Text("Change"),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              // Right Action: Ship binary stream up to Go backend
                               Expanded(
                                 flex: 3,
                                 child: SizedBox(
@@ -328,7 +428,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              // <--- FIX 1: Wrap entire layout to make it infinitely scroll-safe
               physics: const BouncingScrollPhysics(),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -386,18 +485,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     const SizedBox(height: 20),
 
-                    if (_role == "student" || _role == "user" || _role == "")
-                      _buildUploadCard()
-                    else if (_role == "expert") ...[
+                    // 1. Existing Expert Block (Keep this exactly as it is)
+                    if (_role == "expert") ...[
                       const Text(
                         "Incoming Review Requests",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -406,18 +503,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
                             child: ListTile(
-                              leading: const CircleAvatar(
-                                child: Icon(
-                                  Icons.picture_as_pdf,
-                                  color: Colors.red,
-                                ),
-                              ),
-                              title: Text(
-                                "Student Submission #${1024 + index}",
-                              ),
-                              subtitle: const Text(
-                                "Status: Awaiting your analysis",
-                              ),
+                              title: Text("Resume Request #${index + 1}"),
+                              subtitle: const Text("Pending Review"),
                               trailing: ElevatedButton(
                                 onPressed: () {},
                                 child: const Text("Review"),
@@ -426,6 +513,172 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           );
                         },
                       ),
+                    ]
+                    // 2. NEW STUDENT BLOCK (This triggers for normal users/students)
+                    else ...[
+                      // A. The Upload Card Component we fixed earlier
+                      _buildUploadCard(),
+
+                      const SizedBox(height: 25),
+
+                      const Text(
+                        "Available Experts",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // B. Dynamic LinkedIn-Style Expert Feed Card
+                      _isLoadingExperts
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(20.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : _experts.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text("No experts available right now."),
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _experts.length,
+                              itemBuilder: (context, index) {
+                                final expert = _experts[index];
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.grey[200]!),
+                                  ),
+                                  color: Colors.white,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 26,
+                                          backgroundColor: const Color(
+                                            0xFFE8F3FF,
+                                          ),
+                                          child: Text(
+                                            expert['name'] != null &&
+                                                    expert['name'].isNotEmpty
+                                                ? expert['name'][0]
+                                                      .toUpperCase()
+                                                : 'E',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0A66C2),
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                expert['name'] ??
+                                                    "Anonymous Expert",
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF212121),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                expert['current_company'] ??
+                                                    "Independent Mentor",
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[100],
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  expert['specialization'] ??
+                                                      "General Reviewer",
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.grey[800],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                height: 36,
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        _uploadedFileUrl == null
+                                                        ? Colors.grey[300]
+                                                        : const Color(
+                                                            0xFF0A66C2,
+                                                          ),
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    elevation: 0,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            18,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed:
+                                                      _uploadedFileUrl == null
+                                                      ? null
+                                                      : () => _submitToDatabase(
+                                                          expert['id']
+                                                              .toString(),
+                                                        ),
+                                                  child: Text(
+                                                    _uploadedFileUrl == null
+                                                        ? "Upload CV First"
+                                                        : "Request Review",
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ],
 
                     const SizedBox(height: 25),

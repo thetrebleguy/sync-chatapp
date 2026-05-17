@@ -231,7 +231,7 @@ func SubmitCV (c *gin.Context) {
         return
     }
 
-	var lastInsertID int
+	var lastInsertID string
 	query := `INSERT INTO review_request (student_id, expert_id, file_url, status) 
 			VALUES ($1, $2, $3, 'pending') RETURNING id`
 
