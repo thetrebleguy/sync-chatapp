@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:hirewire/services/socket_services.dart';
 import 'package:hirewire/utils/constants.dart';
+import 'package:hirewire/screens/chat_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -34,22 +35,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _fetchUserData();
     _fetchExperts();
-
-    _socketService.connect();
-    _socketService.channel.stream.listen((message) {
-      _showNotification(message);
-    });
-  }
-
-  // shows the snackbar notification
-  void _showNotification(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Live Update: $message"),
-        backgroundColor: Colors.deepPurple,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
@@ -630,45 +615,128 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 12),
-                                              SizedBox(
-                                                width: double.infinity,
-                                                height: 36,
-                                                child: ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        _uploadedFileUrl == null
-                                                        ? Colors.grey[300]
-                                                        : const Color(
-                                                            0xFF0A66C2,
-                                                          ),
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    elevation: 0,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            18,
-                                                          ),
+                                              Row(
+                                                children: [
+                                                  // A. live channel action
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.chat_bubble_outline,
+                                                      color: Color(0xFF0A66C2),
                                                     ),
+                                                    onPressed: () async {
+                                                      final userId =
+                                                          await storage.read(
+                                                            key: 'user_id',
+                                                          );
+                                                      if (userId == null)
+                                                        return;
+
+                                                      try {
+                                                        final response = await http.post(
+                                                          Uri.parse(
+                                                            "${API.baseUrl}/chat-rooms",
+                                                          ),
+                                                          headers: {
+                                                            "Content-Type":
+                                                                "application/json",
+                                                          },
+                                                          body: jsonEncode({
+                                                            "student_id":
+                                                                userId,
+                                                            "expert_id":
+                                                                expert['id']
+                                                                    .toString(),
+                                                          }),
+                                                        );
+
+                                                        if (response.statusCode ==
+                                                                200 ||
+                                                            response.statusCode ==
+                                                                201) {
+                                                          final roomData =
+                                                              jsonDecode(
+                                                                response.body,
+                                                              );
+                                                          final String
+                                                          realRoomId =
+                                                              roomData['room_id'];
+
+                                                          print(
+                                                            "🎯 Room Established! Moving to private stream: $realRoomId",
+                                                          );
+
+                                                          // 2. Open up the dedicated full-screen chat component view!
+                                                          if (context.mounted) {
+                                                            Navigator.push(
+                                                              context,
+                                                              MaterialPageRoute(
+                                                                builder: (context) => ChatScreen(
+                                                                  roomId:
+                                                                      realRoomId,
+                                                                  expertName:
+                                                                      expert['name'] ??
+                                                                      "Expert Mentor",
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }
+                                                        }
+                                                      } catch (e) {
+                                                        print(
+                                                          "Error initiating private chat handshake: $e",
+                                                        );
+                                                      }
+                                                    },
                                                   ),
-                                                  onPressed:
-                                                      _uploadedFileUrl == null
-                                                      ? null
-                                                      : () => _submitToDatabase(
-                                                          expert['id']
-                                                              .toString(),
+                                                  const SizedBox(width: 8),
+
+                                                  Expanded(
+                                                    child: SizedBox(
+                                                      height: 36,
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              _uploadedFileUrl ==
+                                                                  null
+                                                              ? Colors.grey[300]
+                                                              : const Color(
+                                                                  0xFF0A66C2,
+                                                                ),
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          elevation: 0,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  18,
+                                                                ),
+                                                          ),
                                                         ),
-                                                  child: Text(
-                                                    _uploadedFileUrl == null
-                                                        ? "Upload CV First"
-                                                        : "Request Review",
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.bold,
+                                                        onPressed:
+                                                            _uploadedFileUrl ==
+                                                                null
+                                                            ? null
+                                                            : () => _submitToDatabase(
+                                                                expert['id']
+                                                                    .toString(),
+                                                              ),
+                                                        child: Text(
+                                                          _uploadedFileUrl ==
+                                                                  null
+                                                              ? "Upload CV First"
+                                                              : "Request Review",
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 13,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
+                                                ],
                                               ),
                                             ],
                                           ),
@@ -680,31 +748,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               },
                             ),
                     ],
-
-                    const SizedBox(height: 25),
-
-                    // Test Component Block
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _socketService.sendMessage(
-                            "Hello from $_name's Device!",
-                          );
-                        },
-                        icon: const Icon(Icons.bolt),
-                        label: const Text("Test Real-Time Connection"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Colors.black, // Dark accent to break up the color
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
