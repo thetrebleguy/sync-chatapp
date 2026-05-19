@@ -281,6 +281,47 @@ func CreateChatRoom (c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"room_id": RoomID, "message": "Chat room created successfully"})
 }
 
+func GetExpertChatRooms(c *gin.Context) {
+	expertID := c.Param("expert_id")
+
+	// Query to grab rooms and fetch the corresponding student names
+	query := `
+		SELECT cr.room_id, cr.student_id, u.user_name 
+		FROM chat_rooms cr
+		JOIN users u ON cr.student_id = u.user_id
+		WHERE cr.expert_id = $1::uuid
+	`
+
+	rows, err := db.Query(query, expertID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch chat rooms: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var rooms []map[string]interface{}
+	for rows.Next() {
+		var roomID, studentID, studentName string
+		if err := rows.Scan(&roomID, &studentID, &studentName); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning room data"})
+			return
+		}
+
+		rooms = append(rooms, map[string]interface{}{
+			"room_id":      roomID,
+			"student_id":   studentID,
+			"student_name": studentName,
+		})
+	}
+
+	// Fallback to empty array instead of null if no rooms exist yet
+	if rooms == nil {
+		rooms = []map[string]interface{}{}
+	}
+
+	c.JSON(http.StatusOK, rooms)
+}
+
 func SaveMessage(c *gin.Context) {
 	var req MessageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -302,4 +343,45 @@ func SaveMessage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message_id": messageID, "room_id": req.RoomID, "sender_id": req.SenderID, "content": req.Content, "message_type": req.MessageType, "sent_at": sentAt})
+}
+
+func GetChatHistory(c *gin.Context) {
+	roomID := c.Param("room_id")
+
+	query := `
+		SELECT room_id, sender_id, content, sent_at 
+		FROM messages 
+		WHERE room_id = $1::uuid 
+		ORDER BY sent_at ASC
+	`
+
+	rows, err := db.Query(query, roomID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read history: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var history []map[string]interface{}
+	for rows.Next() {
+		var rID, senderID, content string
+		var sentAt time.Time
+		if err := rows.Scan(&rID, &senderID, &content, &sentAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing message row"})
+			return
+		}
+
+		history = append(history, map[string]interface{}{
+			"room_id":   rID,
+			"sender_id": senderID,
+			"content":   content,
+			"sent_at":   sentAt,
+		})
+	}
+
+	if history == nil {
+		history = []map[string]interface{}{}
+	}
+
+	c.JSON(http.StatusOK, history)
 }

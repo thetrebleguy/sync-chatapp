@@ -102,6 +102,9 @@ func main(){
 
 	// GET: Experts
 	r.GET("/experts", GetExperts)
+	r.GET("/expert-rooms/:expert_id", GetExpertChatRooms)
+	r.GET("/chat-history/:room_id", GetChatHistory)
+
 
 	// 4. Start Server
 	r.Run(":8080")

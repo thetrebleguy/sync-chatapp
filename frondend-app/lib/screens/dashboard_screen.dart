@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:hirewire/services/socket_services.dart';
 import 'package:hirewire/utils/constants.dart';
+import 'package:hirewire/screens/expert_inbox_widget.dart';
 import 'package:hirewire/screens/chat_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -399,6 +400,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           "Hirewire ${_role.toUpperCase()}",
@@ -426,86 +428,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(
                       "Logged in as: $_role",
                       style: TextStyle(color: Colors.grey[600], fontSize: 16),
                     ),
                     const Divider(height: 40),
 
-                    // Active Status Card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.grey[300]!),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.description,
-                            color: Colors.grey,
-                            size: 40,
-                          ),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Active CV on Review",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  "You have 0 pending reviews.",
-                                  style: TextStyle(color: Colors.grey[700]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // 1. Existing Expert Block (Keep this exactly as it is)
+                    // ==========================================
+                    // 1. EXPERT VIEW
+                    // ==========================================
                     if (_role == "expert") ...[
                       const Text(
-                        "Incoming Review Requests",
+                        "Active Consultations & Rooms",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: 3,
-                        itemBuilder: (context, index) {
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: ListTile(
-                              title: Text("Resume Request #${index + 1}"),
-                              subtitle: const Text("Pending Review"),
-                              trailing: ElevatedButton(
-                                onPressed: () {},
-                                child: const Text("Review"),
-                              ),
-                            ),
-                          );
-                        },
+                      const SizedBox(height: 4),
+                      Text(
+                        "Tap any student to enter their isolated private chat pipeline.",
+                        style: TextStyle(color: Colors.grey[500], fontSize: 14),
                       ),
+                      const SizedBox(height: 16),
+
+                      const ExpertInboxWidget(), // 🔥 Beautiful, standalone, and 100% bug-free!
                     ]
-                    // 2. NEW STUDENT BLOCK (This triggers for normal users/students)
+                    // ==========================================
+                    // 2. STUDENT VIEW
+                    // ==========================================
                     else ...[
-                      // A. The Upload Card Component we fixed earlier
                       _buildUploadCard(),
-
                       const SizedBox(height: 25),
-
                       const Text(
                         "Available Experts",
                         style: TextStyle(
@@ -514,8 +469,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      // B. Dynamic LinkedIn-Style Expert Feed Card
                       _isLoadingExperts
                           ? const Center(
                               child: Padding(
@@ -617,7 +570,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               const SizedBox(height: 12),
                                               Row(
                                                 children: [
-                                                  // A. live channel action
                                                   IconButton(
                                                     icon: const Icon(
                                                       Icons.chat_bubble_outline,
@@ -661,11 +613,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                           realRoomId =
                                                               roomData['room_id'];
 
-                                                          print(
-                                                            "🎯 Room Established! Moving to private stream: $realRoomId",
-                                                          );
-
-                                                          // 2. Open up the dedicated full-screen chat component view!
                                                           if (context.mounted) {
                                                             Navigator.push(
                                                               context,
@@ -689,7 +636,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                     },
                                                   ),
                                                   const SizedBox(width: 8),
-
                                                   Expanded(
                                                     child: SizedBox(
                                                       height: 36,

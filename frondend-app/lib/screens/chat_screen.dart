@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:hirewire/utils/constants.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -30,8 +31,29 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _connectToIsolatedRoom() async {
     _myUserId = await _storage.read(key: 'user_id');
+    if (_myUserId == null) return;
 
-    // Dynamically append the room parameter to connect directly to our private pool!
+    try {
+      // 1. Fetch the historical records from our new Postgres endpoint first!
+      final historyResponse = await http.get(
+        Uri.parse("${API.baseUrl}/chat-history/${widget.roomId}"),
+      );
+
+      if (historyResponse.statusCode == 200) {
+        final List<dynamic> pastMessages = jsonDecode(historyResponse.body);
+        for (var msg in pastMessages) {
+          _messages.add({
+            "sender_id": msg["sender_id"],
+            "content": msg["content"],
+            "is_me": msg["sender_id"] == _myUserId,
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading database message history: $e");
+    }
+
+    // 2. Initialize the live WebSocket channel pool for incoming active text streams
     final wsUrl = Uri.parse("${API.wsUrl}?room_id=${widget.roomId}");
     _channel = WebSocketChannel.connect(wsUrl);
 
@@ -132,37 +154,43 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  color: Colors.white,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: InputDecoration(
-                            hintText: "Write your message here...",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            fillColor: Colors.grey[100],
-                            filled: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
+                SafeArea(
+                  top: false, // We only care about the bottom screen edge here
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    color: Colors.white,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: InputDecoration(
+                              hintText: "Write your message here...",
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              fillColor: Colors.grey[100],
+                              filled: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.send, color: Color(0xFF0A66C2)),
-                        onPressed: _sendMessage,
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.send,
+                            color: Color(0xFF0A66C2),
+                          ),
+                          onPressed: _sendMessage,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
