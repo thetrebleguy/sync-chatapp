@@ -1,5 +1,6 @@
 // main.dart
 import 'package:flutter/material.dart';
+import 'package:overlay_support/overlay_support.dart';
 import 'screens/login_screen.dart';
 
 void main() {
@@ -11,12 +12,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: "Hirewire",
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+    return OverlaySupport.global( // 2. Wrap your app here!
+      child: MaterialApp(
+        title: 'Hirewire',
+        theme: ThemeData(primarySwatch: Colors.deepPurple),
+        home: const LoginScreen(),
       ),
-      home: const LoginScreen(),
     );
   }
 }

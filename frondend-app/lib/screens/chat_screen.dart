@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:overlay_support/overlay_support.dart';
+import 'package:hirewire/services/socket_services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:hirewire/utils/constants.dart';
@@ -17,6 +19,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [];
   final _storage = const FlutterSecureStorage();
   WebSocketChannel? _channel;
@@ -26,7 +29,29 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // 🎯 Set the active room tracker so notifications are muted for this room
+    CurrentScreenTracker.activeRoomId = widget.roomId;
     _connectToIsolatedRoom();
+  }
+
+  @override
+  void dispose() {
+    // 🧼 Clear it when exiting the chat screen so notifications resume normally!
+    CurrentScreenTracker.activeRoomId = null;
+    _channel?.sink.close();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Future<void> _connectToIsolatedRoom() async {
@@ -45,7 +70,8 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.add({
             "sender_id": msg["sender_id"],
             "content": msg["content"],
-            "is_me": msg["sender_id"] == _myUserId,
+            // 🛠️ Cast to string to prevent int-vs-string mismatch comparison bugs
+            "is_me": msg["sender_id"].toString() == _myUserId.toString(),
           });
         }
       }
@@ -59,16 +85,55 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _channel!.stream.listen((message) {
       final data = jsonDecode(message);
+
+      // Check if the incoming message was sent by someone else, not me!
+      final senderId = data["sender_id"]?.toString();
+      final isNotMe = senderId != _myUserId.toString();
+
       setState(() {
         _messages.add({
           "sender_id": data["sender_id"],
           "content": data["content"],
-          "is_me": data["sender_id"] == _myUserId,
+          "is_me": !isNotMe,
         });
       });
+
+      // 🛠️ Auto-scroll down to keep things premium
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+
+      // 🛠️ NOTIFICATION TRICK: If a message arrives from another user,
+      // trigger a floating notification if they are navigating or running tests!
+      if (isNotMe) {
+        showOverlayNotification((context) {
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: SafeArea(
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF0A66C2),
+                  foregroundColor: Colors.white,
+                  child: Icon(Icons.chat),
+                ),
+                title: const Text(
+                  "Live Notification Stream",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  data["content"] ?? "New message received",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          );
+        }, duration: const Duration(milliseconds: 3000));
+      }
     }, onError: (err) => print("Socket Channel Error: $err"));
 
-    setState(() => _isLoading = false);
+    // 🛠️ FIXED: Turn off the loading state spinner so the UI updates!
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   void _sendMessage() {
@@ -82,13 +147,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _channel!.sink.add(jsonEncode(messagePayload));
     _messageController.clear();
-  }
-
-  @override
-  void dispose() {
-    _channel?.sink.close();
-    _messageController.dispose();
-    super.dispose();
   }
 
   @override
@@ -113,6 +171,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Expanded(
                   child: ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
