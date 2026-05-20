@@ -29,14 +29,14 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // 🎯 Set the active room tracker so notifications are muted for this room
+    // set the active room tracker so notifications are muted for this room
     CurrentScreenTracker.activeRoomId = widget.roomId;
     _connectToIsolatedRoom();
   }
 
   @override
   void dispose() {
-    // 🧼 Clear it when exiting the chat screen so notifications resume normally!
+    // clear it when exiting the chat screen so notifications resume normally!
     CurrentScreenTracker.activeRoomId = null;
     _channel?.sink.close();
     _messageController.dispose();
@@ -59,7 +59,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_myUserId == null) return;
 
     try {
-      // 1. Fetch the historical records from our new Postgres endpoint first!
+      // fetch the historical records from postgres endpoint first
       final historyResponse = await http.get(
         Uri.parse("${API.baseUrl}/chat-history/${widget.roomId}"),
       );
@@ -70,7 +70,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.add({
             "sender_id": msg["sender_id"],
             "content": msg["content"],
-            // 🛠️ Cast to string to prevent int-vs-string mismatch comparison bugs
+            // cast to string to prevent int-vs-string mismatch comparison bugs
             "is_me": msg["sender_id"].toString() == _myUserId.toString(),
           });
         }
@@ -79,14 +79,12 @@ class _ChatScreenState extends State<ChatScreen> {
       print("Error loading database message history: $e");
     }
 
-    // 2. Initialize the live WebSocket channel pool for incoming active text streams
+    // initialize the live ws channel pool for incoming active text streams
     final wsUrl = Uri.parse("${API.wsUrl}?room_id=${widget.roomId}");
     _channel = WebSocketChannel.connect(wsUrl);
 
     _channel!.stream.listen((message) {
       final data = jsonDecode(message);
-
-      // Check if the incoming message was sent by someone else, not me!
       final senderId = data["sender_id"]?.toString();
       final isNotMe = senderId != _myUserId.toString();
 
@@ -98,39 +96,10 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       });
 
-      // 🛠️ Auto-scroll down to keep things premium
+      // instantly glide down to the newest text block
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-
-      // 🛠️ NOTIFICATION TRICK: If a message arrives from another user,
-      // trigger a floating notification if they are navigating or running tests!
-      if (isNotMe) {
-        showOverlayNotification((context) {
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: SafeArea(
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF0A66C2),
-                  foregroundColor: Colors.white,
-                  child: Icon(Icons.chat),
-                ),
-                title: const Text(
-                  "Live Notification Stream",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  data["content"] ?? "New message received",
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          );
-        }, duration: const Duration(milliseconds: 3000));
-      }
     }, onError: (err) => print("Socket Channel Error: $err"));
 
-    // 🛠️ FIXED: Turn off the loading state spinner so the UI updates!
     setState(() {
       _isLoading = false;
     });
@@ -139,10 +108,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty || _myUserId == null) return;
 
+    final String messageText = _messageController.text.trim();
+
     final messagePayload = {
       "room_id": widget.roomId,
       "sender_id": _myUserId,
-      "content": _messageController.text.trim(),
+      "content": messageText,
     };
 
     _channel!.sink.add(jsonEncode(messagePayload));

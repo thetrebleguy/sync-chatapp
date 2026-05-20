@@ -5,6 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"context"
+	"log"
+
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/messaging"
+	"google.golang.org/api/option"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,7 +23,28 @@ var chatRoomsPool = make(map[string]map[*websocket.Conn]bool)
 var broadcast = make(chan []byte)
 var poolMutex sync.Mutex
 
+var fcmClient *messaging.Client
+
+func initFirebase() {
+	opt := option.WithCredentialsFile("serviceAccountKey.json")
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		log.Fatalf("Error initializing Firebase App: %v", err)
+	}
+
+	client, err := app.Messaging(context.Background())
+	if err != nil {
+		log.Fatalf("Error initializing Firebase Messaging client: %v", err)
+	}
+	fcmClient = client
+	fmt.Println("Firebase Admin SDK initialized successfully!")
+}
+
 func HandleWebSockets(w http.ResponseWriter, r *http.Request) {
+	if fcmClient == nil {
+		initFirebase()
+	}
+
 	roomID := r.URL.Query().Get("room_id")
 	if roomID == "" {
 		return 
@@ -55,6 +82,42 @@ func HandleWebSockets(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						fmt.Println("DB Asynchronous Background Save Error:", err)
 					}
+
+					const targetDeviceToken := os.Getenv("TARGET_DEVICE_TOKEN")
+
+					if targetDeviceToken == "" {
+						fmt.Println("Warning: TARGET_DEVICE_TOKEN is empty in environment variables")
+						return
+					}
+					
+					msgPayload := &messaging.Message{
+						Token: targetDeviceToken,
+						Notification: &messaging.Notification{
+							Title: "New Message Received",
+							Body:  req.Content,
+						},
+						Data: map[string]string{
+							"room_id": req.RoomID,
+						},
+					}
+
+					response, err := fcmClient.Send(context.Background(), msgPayload)
+					if err != nil {
+						fmt.Printf("FCM Error pushing notification: %v\n", err)
+					} else {
+						fmt.Printf("Successfully sent cloud push message response!", response)
+					}
+
+					// 3. Broadcast to all active websockets in the room
+					poolMutex.Lock()
+					for clientConn := range chatRoomsPool[req.RoomID] {
+						err := clientConn.WriteMessage(websocket.TextMessage, msgBytes)
+						if err != nil {
+							clientConn.Close()
+							delete(chatRoomsPool[req.RoomID], clientConn)
+						}
+					}
+					poolMutex.Unlock()
 				}(data)
 			}
 		}

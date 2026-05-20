@@ -1,5 +1,7 @@
 backend-go/.env
+backend-go/serviceAccountKey.json
 
+frondend-app/android/app/google-services.json
 frondend-app/.dart_tool/
 frondend-app/.build/
 frondend-app/build/

@@ -6,6 +6,8 @@ import 'package:hirewire/utils/constants.dart';
 import 'package:hirewire/screens/expert_inbox_widget.dart';
 import 'package:hirewire/screens/chat_screen.dart';
 import 'package:overlay_support/overlay_support.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -37,12 +39,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _fetchUserData();
     _fetchExperts();
+    _initFirebaseMessaging();
   }
 
   @override
   void dispose() {
     _socketService.close();
     super.dispose();
+  }
+
+  Future<void> _initFirebaseMessaging() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('Foreground cloud push notification caught!');
+
+      if (message.notification != null) {
+        String? incomingRoomId = message.data["room_id"]?.toString();
+
+        // 🎯 CONTEXT-AWARE CHECK: If the user is already inside this person's chat room, mute the popup!
+        if (CurrentScreenTracker.activeRoomId == incomingRoomId &&
+            incomingRoomId != null) {
+          print(
+            "User is already in chat room $incomingRoomId. Banner suppressed.",
+          );
+          return;
+        }
+
+        // Otherwise, pop up the beautiful WhatsApp-style notification banner!
+        showWhatsAppStyleNotification(
+          message.notification!.title ?? "New Notification",
+          message.notification!.body ?? "",
+        );
+      }
+    });
   }
 
   void showWhatsAppStyleNotification(String senderName, String messageContent) {
