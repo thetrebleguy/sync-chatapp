@@ -10,6 +10,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print("Handling a background message: ${message.messageId}");
 }
 
+class AppColors {
+  static const Color bgBlue = Color(0xFF0A0F1D);
+  static const Color mainRed = Color(0xFFFF3131);
+  static const Color surfaceCard = Color(0xFF141C33);
+  static const Color textMuted = Color(0xFF8E9AA8);
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -27,10 +34,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OverlaySupport.global(
-      // 2. Wrap your app here!
       child: MaterialApp(
-        title: 'Hirewire',
-        theme: ThemeData(primarySwatch: Colors.deepPurple),
+        title: 'RedLine',
+        theme: ThemeData(primarySwatch: Colors.red),
         home: const LoginScreen(),
       ),
     );

@@ -28,6 +28,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = true;
   String? _uploadedDocUrl;
 
+  String? _lastProcessedMessage;
+  DateTime? _lastProcessedTime;
+
   @override
   void initState() {
     super.initState();
@@ -57,8 +60,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _connectToIsolatedRoom() async {
-    _myUserId = await _storage.read(key: 'user_id');
-    if (_myUserId == null) return;
+    final userId = await _storage.read(key: 'user_id');
+    if (userId == null) return;
+
+    final String standardizedUserId = userId.toString().trim();
+
+    setState(() {
+      _myUserId = standardizedUserId;
+    });
 
     try {
       // fetch the historical records from postgres endpoint first
@@ -68,13 +77,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (historyResponse.statusCode == 200) {
         final List<dynamic> pastMessages = jsonDecode(historyResponse.body);
-        for (var msg in pastMessages) {
-          _messages.add({
-            "sender_id": msg["sender_id"],
-            "content": msg["content"],
-            "is_me": msg["sender_id"].toString() == _myUserId.toString(),
-          });
-        }
+
+        setState(() {
+          _messages.clear(); // Clear cached/stale iterations
+          for (var msg in pastMessages) {
+            _messages.add({
+              "sender_id": msg["sender_id"],
+              "content": msg["content"],
+              "is_me": msg["sender_id"].toString().trim() == standardizedUserId,
+            });
+          }
+        });
       }
 
       final roomResponse = await http.get(
@@ -97,12 +110,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _channel!.stream.listen((message) {
       final data = jsonDecode(message);
-      final senderId = data["sender_id"]?.toString();
+      final incomingSenderId = data["sender_id"]?.toString().trim();
 
-      if (senderId == _myUserId.toString()) {
-        return;
+      if (incomingSenderId == standardizedUserId) {
+        return; // Absolute block for sender echo replication loop
       }
 
+      // 💡 Clean state updates without needing temporary time delays
       setState(() {
         _messages.add({
           "sender_id": data["sender_id"],
@@ -154,25 +168,22 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          // Expands nicely to cover 80% of the screen for an actual readable document view
-          height: MediaQuery.of(context).size.height * 0.80,
+          height: MediaQuery.of(context).size.height * 0.85,
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: Color(0xFF141C33), // Dark Surface Card Layer
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
-              // Grab Handle
               Container(
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 width: 40,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Colors.white24,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              // Header Layout
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -183,35 +194,42 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.picture_as_pdf, color: Color(0xFFD93025)),
+                        Icon(
+                          Icons.picture_as_pdf,
+                          color: Color(0xFFFF3131),
+                        ), // RedLine Red Accent
                         SizedBox(width: 8),
                         Text(
-                          "Live Document Preview",
+                          "Live Document Portfolio Preview",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                            fontSize: 15,
+                            color: Colors.white,
                           ),
                         ),
                       ],
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
-
-              // 🎯 THE LIVE RENDERING PDF ENGINE VIEWPORT
+              const Divider(height: 1, color: Colors.white10),
               Expanded(
                 child: Container(
-                  color: Colors.grey[100],
+                  color: const Color(
+                    0xFF0A0F1D,
+                  ), // Deep Dark Canvas for PDF base contrast
                   child: SfPdfViewer.network(
                     url,
                     canShowScrollHead: true,
                     canShowScrollStatus: true,
-                    // Shows a clean native loading bar while downloading from Supabase storage bucket
                     onDocumentLoadFailed:
                         (PdfDocumentLoadFailedDetails details) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -219,7 +237,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               content: Text(
                                 "Failed to render PDF: ${details.description}",
                               ),
-                              backgroundColor: Colors.red,
+                              backgroundColor: const Color(0xFFFF3131),
                             ),
                           );
                         },
@@ -236,39 +254,39 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0F1D), // Base Dark
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0A0F1D),
+        elevation: 0,
         title: Text(
           widget.expertName,
           style: const TextStyle(
-            color: Colors.black,
+            color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        foregroundColor: Colors.black,
-
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (_uploadedDocUrl != null && _uploadedDocUrl!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.only(right: 8.0),
               child: IconButton(
                 icon: const Icon(
                   Icons.picture_as_pdf_rounded,
-                  color: Color(0xFFD93025),
-                  size: 28,
+                  color: Color(0xFFFF3131),
+                  size: 26,
                 ),
                 tooltip: "Review Uploaded Document",
-                onPressed: () {
-                  _openDocumentViewer(context, _uploadedDocUrl!);
-                },
+                onPressed: () => _openDocumentViewer(context, _uploadedDocUrl!),
               ),
             ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF3131)),
+            )
           : Column(
               children: [
                 Expanded(
@@ -290,10 +308,17 @@ class _ChatScreenState extends State<ChatScreen> {
                             horizontal: 14,
                             vertical: 10,
                           ),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                          ),
                           decoration: BoxDecoration(
                             color: isMe
-                                ? const Color(0xFF0A66C2)
-                                : Colors.grey[200],
+                                ? const Color(
+                                    0xFFFF3131,
+                                  ) // Sender: RedLine Neon Red
+                                : const Color(
+                                    0xFF141C33,
+                                  ), // Recipient: Secondary Elevated Dark Blue
                             borderRadius: BorderRadius.circular(16).copyWith(
                               bottomRight: isMe
                                   ? const Radius.circular(0)
@@ -305,8 +330,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           child: Text(
                             msg["content"] ?? "",
-                            style: TextStyle(
-                              color: isMe ? Colors.white : Colors.black87,
+                            style: const TextStyle(
+                              color: Colors.white,
                               fontSize: 15,
                             ),
                           ),
@@ -315,47 +340,50 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
                 ),
-                SafeArea(
-                  top: false,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    color: Colors.white,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  color: const Color(0xFF0A0F1D),
+                  child: SafeArea(
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment
-                          .end, // 🎯 Align button to bottom as field grows
                       children: [
                         Expanded(
                           child: TextField(
                             controller: _messageController,
-                            minLines: 1,
-                            maxLines: 4,
+                            style: const TextStyle(color: Colors.white),
+                            maxLines: null,
                             keyboardType: TextInputType.multiline,
                             decoration: InputDecoration(
                               hintText: "Write your message here...",
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF8E9AA8),
+                                fontSize: 14,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
                                 borderSide: BorderSide.none,
                               ),
-                              fillColor: Colors.grey[100],
+                              fillColor: const Color(
+                                0xFF141C33,
+                              ), // Match deep text layer fill
                               filled: true,
-                              isDense:
-                                  true, // Allows vertical expansion without padding pops
+                              isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
-                                vertical:
-                                    10, // Gives a clean height balance for multi-lines
+                                vertical: 10,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(
                             Icons.send,
-                            color: Color(0xFF0A66C2),
+                            color: Color(
+                              0xFFFF3131,
+                            ), // Purged LinkedIn Blue for Neon Red
                           ),
                           onPressed: _sendMessage,
                         ),

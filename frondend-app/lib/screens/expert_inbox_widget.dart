@@ -47,7 +47,9 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFFF3131)),
+      );
     }
 
     if (_activeRooms.isEmpty) {
@@ -60,7 +62,7 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
               Icon(
                 Icons.chat_bubble_outline,
                 size: 64,
-                color: Colors.grey[400],
+                color: Color(0xFF141C33),
               ),
               const SizedBox(height: 16),
               Text(
@@ -74,7 +76,7 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
               const SizedBox(height: 4),
               Text(
                 "When students text you, rooms will show up here.",
-                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                style: TextStyle(color: Color(0xFF8E9AA8), fontSize: 13),
               ),
             ],
           ),
@@ -95,8 +97,9 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF141C33),
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10, width: 0.5),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.03),
@@ -111,8 +114,8 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
               vertical: 8,
             ),
             leading: CircleAvatar(
-              backgroundColor: const Color(0xFF0A66C2).withOpacity(0.1),
-              foregroundColor: const Color(0xFF0A66C2),
+              backgroundColor: const Color(0xFFFF3131).withOpacity(0.1),
+              foregroundColor: const Color(0xFFFF3131),
               child: Text(
                 studentName[0].toUpperCase(),
                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -120,16 +123,17 @@ class _ExpertInboxWidgetState extends State<ExpertInboxWidget> {
             ),
             title: Text(
               studentName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, 
+              color: Color(0xFF8E9AA8)),
             ),
             subtitle: const Text(
               "Tap to join consultation room",
-              style: TextStyle(color: Colors.grey, fontSize: 13),
+              style: TextStyle(color: Color(0xFF8E9AA8), fontSize: 13),
             ),
             trailing: const Icon(
               Icons.arrow_forward_ios,
               size: 16,
-              color: Colors.grey,
+              color: Color(0xFF8E9AA8),
             ),
             onTap: () {
               Navigator.push(

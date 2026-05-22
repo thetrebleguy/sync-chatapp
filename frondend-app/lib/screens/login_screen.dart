@@ -1,8 +1,5 @@
-// import 'dart:convert';
 import 'dashboard_screen.dart';
 import 'package:flutter/material.dart';
-// import 'package:http/http.dart' as http;
-// import '../utils/constants.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -20,8 +17,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // for the REGISTERATION
   String _selectedRole = "student";
-  List<String> _specialties = ["2D Art", "3D Modelling", "Game Dev", "Web Dev"];
-  String _selectedSpecialty = "Web Dev";
+  List<String> _specialties = [
+    "UI/UX",
+    "DevOps",
+    "Game Dev",
+    "Web Dev",
+    "Frontend",
+    "Backend",
+    "FullStack",
+  ];
+  String _selectedSpecialty = "UI/UX";
   bool _isWorking = false;
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -46,12 +51,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
 
-    print("Step 1: Auth attempt finished. Success = $success");
+    // print("Step 1: Auth attempt finished. Success = $success");
     if (success) {
       // navigate to dashboard screen
       if (!mounted) return;
 
-      print("Step 2: Navigating to Dashboard...");
+      // print("Step 2: Navigating to Dashboard...");
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -64,147 +69,224 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildCustomTextField({
+    required TextEditingController controller,
+    required String labelText,
+    bool obscureText = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: labelText,
+          labelStyle: const TextStyle(color: Color(0xFF8E9AA8)),
+          filled: true,
+          fillColor: const Color(0xFF141C33), // Dark Card Surface
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white10),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFFF3131), width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 100),
+      backgroundColor: const Color(0xFF0A0F1D), // Deep Charcoal Blue
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // BRAND LOGO TAGLINE
+              const Text(
+                "REDLINE",
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFF3131), // Neon Red Tagline
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "From Red, on Line, to Point",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF8E9AA8),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // DYNAMIC HEADER
               Text(
                 _isLogin ? "Welcome Back" : "Create Account",
                 style: const TextStyle(
-                  fontSize: 28,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
               ),
-
-              // EMAIL
-              const SizedBox(height: 40),
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: "Email",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-
-              // PASSWORD
               const SizedBox(height: 20),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: "Password",
-                  border: OutlineInputBorder(),
+
+              // FORM FIELDS
+              if (!_isLogin) ...[
+                _buildCustomTextField(
+                  controller: _nameController,
+                  labelText: "Full Name",
                 ),
+                _buildCustomTextField(
+                  controller: _phoneController,
+                  labelText: "Phone Number",
+                ),
+              ],
+
+              _buildCustomTextField(
+                controller: _emailController,
+                labelText: "Email Address",
+              ),
+              _buildCustomTextField(
+                controller: _passwordController,
+                labelText: "Password",
+                obscureText: true,
               ),
 
-              // NEW-REGISTER ACCOUNT ONLY
+              // CONDITIONAL REGISTRATION DROPDOWNS
               if (!_isLogin) ...[
-                // user name
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: "Full Name",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-
-                // phone number
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: "Phone Number",
-                    prefixText: "+62 ",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // role selection
-                DropdownButtonFormField<String>(
-                  value: _selectedRole,
-                  items: ["student", "expert"]
-                      .map(
-                        (role) => DropdownMenuItem(
-                          value: role,
-                          child: Text(role == "student" ? "Student" : "Expert"),
+                const SizedBox(height: 12),
+                Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(canvasColor: const Color(0xFF141C33)),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedRole,
+                    decoration: InputDecoration(
+                      labelText: "Select Role",
+                      labelStyle: const TextStyle(color: Color(0xFF8E9AA8)),
+                      filled: true,
+                      fillColor: const Color(0xFF141C33),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: "student",
+                        child: Text(
+                          "Student",
+                          style: TextStyle(color: Colors.white),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (val) => setState(() => _selectedRole = val!),
-                  decoration: const InputDecoration(
-                    labelText: "Select Role",
-                    border: OutlineInputBorder(),
+                      ),
+                      DropdownMenuItem(
+                        value: "expert",
+                        child: Text(
+                          "Expert / Mentor",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) =>
+                        setState(() => _selectedRole = val ?? "student"),
                   ),
                 ),
-
-                // Specialization
-                const SizedBox(height: 20),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text("My Specialty:"),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8.0,
-                  children: _specialties.map((spec) {
-                    return ChoiceChip(
-                      label: Text(spec),
-                      selected: _selectedSpecialty == spec,
-                      onSelected: (selected) =>
-                          setState(() => _selectedSpecialty = spec),
-                    );
-                  }).toList(),
-                ),
-
-                // Expert-only Company field
-                if (_selectedRole == "Expert") ...[
-                  const SizedBox(height: 10),
-                  SwitchListTile(
-                    title: const Text("Working at a company?"),
+                if (_selectedRole == "expert") ...[
+                  const SizedBox(height: 12),
+                  Theme(
+                    data: Theme.of(
+                      context,
+                    ).copyWith(canvasColor: const Color(0xFF141C33)),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedSpecialty,
+                      decoration: InputDecoration(
+                        labelText: "Specialty Field",
+                        labelStyle: const TextStyle(color: Color(0xFF8E9AA8)),
+                        filled: true,
+                        fillColor: const Color(0xFF141C33),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: _specialties
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(
+                                s,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedSpecialty = val ?? "Web Dev"),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    title: const Text(
+                      "Working at a company?",
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    activeColor: const Color(0xFFFF3131),
                     value: _isWorking,
-                    onChanged: (val) => setState(() => _isWorking = val),
+                    onChanged: (val) =>
+                        setState(() => _isWorking = val ?? false),
                   ),
                   if (_isWorking)
-                    TextField(
+                    _buildCustomTextField(
                       controller: _companyController,
-                      decoration: const InputDecoration(
-                        labelText: "Company Name",
-                        border: OutlineInputBorder(),
-                      ),
+                      labelText: "Company Name",
                     ),
                 ],
               ],
 
               // BUTTON TO CLICK
-              const SizedBox(height: 30),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _handleAuth,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: const Color(
+                      0xFFFF3131,
+                    ), // Fixed from Purple to Neon Red
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
                   ),
-                  child: Text(_isLogin ? "Login" : "Register"),
+                  child: Text(
+                    _isLogin ? "Login" : "Register",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
+              const SizedBox(height: 12),
               TextButton(
                 onPressed: () => setState(() => _isLogin = !_isLogin),
                 child: Text(
                   _isLogin
                       ? "Don't have an account? Register"
                       : "Already have an account? Login",
+                  style: const TextStyle(color: Color(0xFF8E9AA8)),
                 ),
               ),
             ],

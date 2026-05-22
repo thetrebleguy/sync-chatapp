@@ -10,7 +10,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -90,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: SafeArea(
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: const Color(0xFF0A66C2),
+              backgroundColor: const Color(0xFFFF3131),
               foregroundColor: Colors.white,
               child: Text(
                 senderName != null && senderName.isNotEmpty
@@ -100,15 +100,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             title: Text(
               senderName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             subtitle: Text(
               messageContent,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF8E9AA8)),
             ),
             trailing: IconButton(
-              icon: const Icon(Icons.close),
+              icon: const Icon(Icons.close, color: Colors.white70),
               onPressed: () {
                 OverlaySupportEntry.of(context)?.dismiss();
               },
@@ -120,65 +124,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _uploadResume() async {
-    if (_selectedFile == null)
-      return; // if there is nothing in the file, just return
+    if (_selectedFile == null) return;
 
-    // if it exists, then change the state
     setState(() {
       _isUploading = true;
     });
 
     try {
-      // create the multipart req
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('${API.baseUrl}/upload'),
       );
 
-      // attach the file bytes safely from mobile memory
-      if (_selectedFile!.bytes != null) {
-        // if bytes are already in memory (common in some web/desktop pickers)
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            _selectedFile!.bytes!,
-            filename: _selectedFile!.name,
-          ),
-        );
-      } else if (_selectedFile!.path != null) {
-        // direct path reading for physical Android/iOS devices
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            _selectedFile!.path!,
-            filename: _selectedFile!.name,
-          ),
-        );
+      if (kIsWeb) {
+        if (_selectedFile!.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              _selectedFile!.bytes!,
+              filename: _selectedFile!.name,
+            ),
+          );
+        } else {
+          throw Exception("No bytes found in selected file for web upload.");
+        }
+      } else {
+        // This block will only execute on real Android/iOS devices
+        if (_selectedFile!.path != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'file',
+              _selectedFile!.path!,
+              filename: _selectedFile!.name,
+            ),
+          );
+        }
       }
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
-      // if success
       if (response.statusCode == 200) {
         var responseData = json.decode(response.body);
         setState(() {
           _uploadedFileUrl = responseData['file_url'];
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Upload to Cloud Successful")));
-        print("Supabase Direct URL: $_uploadedFileUrl");
-      } else {
-        print("Upload failed with status: ${response.statusCode}");
-        print("Error: ${response.body}");
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Server rejected file structure.")),
+          const SnackBar(
+            content: Text("Upload to Cloud Successful"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Server rejected file structure."),
+            backgroundColor: Color(0xFFFF3131),
+          ),
         );
       }
     } catch (e) {
       print("Network Error while uploading: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Upload failed: ${e.toString()}"),
+          backgroundColor: const Color(0xFFFF3131),
+        ),
+      );
     } finally {
       setState(() {
         _isUploading = false;
@@ -201,18 +214,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // 🛠️ 2. Paste your context-aware WhatsApp notification logic here!
       SocketService().onMessageReceived = (data) {
-        String? incomingRoomId = data["room_id"];
+        String? incomingRoomId = data["room_id"]?.toString();
 
         // If the expert/student is already inside this specific room, do NOT spam banners
-        if (CurrentScreenTracker.activeRoomId == incomingRoomId) {
-          return;
-        } else {
-          // Otherwise, show the beautiful slide-down pop-up!
-          showWhatsAppStyleNotification(
-            data["sender_name"] ?? "New Message",
-            data["content"] ?? "",
+        if (CurrentScreenTracker.activeRoomId == incomingRoomId &&
+            incomingRoomId != null) {
+          print(
+            "Chat room matching active tracker state. Suppressing global pipeline replication loop.",
           );
+          return;
         }
+
+        // Otherwise, safely push out your banner notification
+        showWhatsAppStyleNotification(
+          data["sender_name"] ?? "New Message",
+          data["content"] ?? "",
+        );
       };
 
       final response = await http.get(
@@ -241,6 +258,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -329,10 +347,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildUploadCard() {
     return Card(
       elevation: 0,
-      color: Colors.deepPurple.withOpacity(0.05),
+      color: const Color(0xFF141C33),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
-        side: BorderSide(color: Colors.deepPurple.withOpacity(0.2)),
+        side: const BorderSide(color: Color(0xFFFF3131), width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -344,13 +362,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.deepPurple,
+                color: Color(0xFFFF3131),
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              "Upload your resume in PDF format. An expert will review your profile and give you brutal feedback.",
-              style: TextStyle(color: Colors.grey[700], fontSize: 14),
+              "Upload your resume in PDF format. An expert will review your profile and give you feedback and critique.",
+              style: TextStyle(color: Color(0xFF8E9AA8), fontSize: 14),
             ),
             const SizedBox(height: 16),
 
@@ -359,24 +377,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF0A0F1D),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.deepPurple.withOpacity(0.2)),
+                  border: Border.all(color: Colors.white10),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.picture_as_pdf, color: Colors.red),
+                    const Icon(Icons.picture_as_pdf, color: Color(0xFFFF3131)),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _selectedFile!.name,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     Text(
                       "${(_selectedFile!.size / (1024 * 1024)).toStringAsFixed(2)} MB",
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFF8E9AA8),
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -388,7 +412,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
-                      child: CircularProgressIndicator(),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFF3131),
+                      ),
                     ),
                   )
                 : SizedBox(
@@ -397,10 +423,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEDF5FD),
+                              color: const Color(0xFF01754F).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(0xFFDCE6F1),
+                                color: const Color(0xFF01754F),
                               ),
                             ),
                             child: const Row(
@@ -414,7 +440,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Text(
                                   "CV Saved! Select an Expert Below",
                                   style: TextStyle(
-                                    color: Color(0xFF0A66C2),
+                                    color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -427,19 +453,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: ElevatedButton.icon(
                               onPressed: _pickResume,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                elevation: 0,
+                                backgroundColor: const Color(0xFFFF3131),
                               ),
                               icon: const Icon(Icons.upload_file),
                               label: const Text("Select PDF Resume"),
                             ),
                           )
-                        : // STEP 3: Local file selected, but not uploaded up to the Go backend yet
-                          Row(
+                        : Row(
                             children: [
                               Expanded(
                                 flex: 2,
@@ -448,9 +468,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: OutlinedButton.icon(
                                     onPressed: _pickResume,
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.grey[700],
-                                      side: BorderSide(
-                                        color: Colors.grey[400]!,
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(
+                                        color: Colors.white24,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
@@ -470,11 +490,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     onPressed: _uploadResume,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.green,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      elevation: 0,
                                     ),
                                     icon: const Icon(Icons.cloud_upload),
                                     label: const Text("Upload Vault"),
@@ -491,22 +506,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0A0F1D),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0A0F1D),
+        elevation: 0,
+        centerTitle: true,
         title: Text(
-          "Hirewire ${_role.toUpperCase()}",
+          "REDLINE ${_role.toUpperCase()}",
           style: const TextStyle(
-            color: Colors.black,
+            color: Color(0xFFFF3131),
             fontWeight: FontWeight.bold,
+            fontSize: 18,
+            letterSpacing: 1,
           ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF3131)),
+            )
           : SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               child: Padding(
@@ -515,53 +537,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Hello, $_name! 👋",
+                      "Hello, $_name!",
                       style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       "Logged in as: $_role",
-                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      style: const TextStyle(
+                        color: Color(0xFF8E9AA8),
+                        fontSize: 16,
+                      ),
                     ),
-                    const Divider(height: 40),
+                    const Divider(height: 40, color: Colors.white10),
 
-                    // 1. EXPERT VIEW
                     if (_role == "expert") ...[
                       const Text(
                         "Active Consultations & Rooms",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                      ),
-
-                      // 🛠️ QUICK DEMO BUTTON FOR EVALUATORS TO PROVE SYSTEM CAPABILITY:
-                      TextButton.icon(
-                        icon: const Icon(
-                          Icons.notification_important,
-                          color: Colors.deepPurple,
-                        ),
-                        label: const Text(
-                          "Simulate Incoming Consultation Alert",
-                        ),
-                        onPressed: () {
-                          showWhatsAppStyleNotification(
-                            "Budi (Student)",
-                            "Bro, can you check my resume? I need feedback on my database schema.",
-                          );
-                        },
                       ),
 
                       const SizedBox(height: 16),
                       const ExpertInboxWidget(),
-                    ]
-                    // ==========================================
-                    // 2. STUDENT VIEW
-                    // ==========================================
-                    else ...[
+                    ] else ...[
                       _buildUploadCard(),
                       const SizedBox(height: 25),
                       const Text(
@@ -569,6 +574,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -576,14 +582,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ? const Center(
                               child: Padding(
                                 padding: EdgeInsets.all(20.0),
-                                child: CircularProgressIndicator(),
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFFF3131),
+                                ),
                               ),
                             )
                           : _experts.isEmpty
                           ? const Center(
                               child: Padding(
                                 padding: EdgeInsets.all(16.0),
-                                child: Text("No experts available right now."),
+                                child: Text(
+                                  "No experts available right now.",
+                                  style: TextStyle(color: Color(0xFF8E9AA8)),
+                                ),
                               ),
                             )
                           : ListView.builder(
@@ -597,9 +608,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: Colors.grey[200]!),
+                                    side: const BorderSide(
+                                      color: Colors.white10,
+                                      width: 0.5,
+                                    ),
                                   ),
-                                  color: Colors.white,
+                                  color: const Color(0xFF141C33),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16.0),
                                     child: Row(
@@ -609,8 +623,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         CircleAvatar(
                                           radius: 26,
                                           backgroundColor: const Color(
-                                            0xFFE8F3FF,
-                                          ),
+                                            0xFFFF3131,
+                                          ).withOpacity(0.1),
                                           child: Text(
                                             expert['name'] != null &&
                                                     expert['name'].isNotEmpty
@@ -619,7 +633,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 : 'E',
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              color: Color(0xFF0A66C2),
+                                              color: Color(0xFFFF3131),
                                               fontSize: 18,
                                             ),
                                           ),
@@ -636,16 +650,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 style: const TextStyle(
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF212121),
+                                                  color: Colors.white,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
                                                 expert['current_company'] ??
                                                     "Independent Mentor",
-                                                style: TextStyle(
+                                                style: const TextStyle(
                                                   fontSize: 14,
-                                                  color: Colors.grey[600],
+                                                  color: Color(0xFF8E9AA8),
                                                 ),
                                               ),
                                               const SizedBox(height: 8),
@@ -656,17 +670,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                       vertical: 4,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey[100],
+                                                  color: const Color(
+                                                    0xFF0A0F1D,
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   expert['specialization'] ??
                                                       "General Reviewer",
-                                                  style: TextStyle(
+                                                  style: const TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w500,
-                                                    color: Colors.grey[800],
+                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
@@ -679,88 +695,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                       color:
                                                           _uploadedFileUrl ==
                                                               null
-                                                          ? Colors.grey
+                                                          ? Colors.white24
                                                           : const Color(
-                                                              0xFF0A66C2,
+                                                              0xFFFF3131,
                                                             ),
                                                     ),
-                                                    onPressed: () async {
-                                                      if (_uploadedFileUrl ==
-                                                          null) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              "Please select and upload your PDF Resume to the vault first!",
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.orange,
-                                                          ),
-                                                        );
-                                                        return;
-                                                      }
+                                                    onPressed:
+                                                        _uploadedFileUrl == null
+                                                        ? null
+                                                        : () async {
+                                                            final userId =
+                                                                await storage.read(
+                                                                  key:
+                                                                      'user_id',
+                                                                );
+                                                            if (userId == null)
+                                                              return;
 
-                                                      final userId =
-                                                          await storage.read(
-                                                            key: 'user_id',
-                                                          );
-                                                      if (userId == null)
-                                                        return;
-
-                                                      try {
-                                                        final response = await http.post(
-                                                          Uri.parse(
-                                                            "${API.baseUrl}/chat-rooms",
-                                                          ),
-                                                          headers: {
-                                                            "Content-Type":
-                                                                "application/json",
-                                                          },
-                                                          body: jsonEncode({
-                                                            "student_id":
-                                                                userId,
-                                                            "expert_id":
-                                                                expert['id']
-                                                                    .toString(),
-                                                            "file_url":
-                                                                _uploadedFileUrl,
-                                                          }),
-                                                        );
-
-                                                        if (response.statusCode ==
-                                                                200 ||
-                                                            response.statusCode ==
-                                                                201) {
-                                                          final roomData =
-                                                              jsonDecode(
-                                                                response.body,
-                                                              );
-                                                          final String
-                                                          realRoomId =
-                                                              roomData['room_id'];
-
-                                                          if (context.mounted) {
-                                                            Navigator.push(
-                                                              context,
-                                                              MaterialPageRoute(
-                                                                builder: (context) => ChatScreen(
-                                                                  roomId:
-                                                                      realRoomId,
-                                                                  expertName:
-                                                                      expert['name'] ??
-                                                                      "Expert Mentor",
+                                                            try {
+                                                              final response = await http.post(
+                                                                Uri.parse(
+                                                                  "${API.baseUrl}/chat-rooms",
                                                                 ),
-                                                              ),
-                                                            );
-                                                          }
-                                                        }
-                                                      } catch (e) {
-                                                        print(
-                                                          "Error initiating private chat handshake: $e",
-                                                        );
-                                                      }
-                                                    },
+                                                                headers: {
+                                                                  "Content-Type":
+                                                                      "application/json",
+                                                                },
+                                                                body: jsonEncode({
+                                                                  "student_id":
+                                                                      userId,
+                                                                  "expert_id":
+                                                                      expert['id']
+                                                                          .toString(),
+                                                                  "file_url":
+                                                                      _uploadedFileUrl,
+                                                                }),
+                                                              );
+
+                                                              if (response.statusCode ==
+                                                                      200 ||
+                                                                  response.statusCode ==
+                                                                      201) {
+                                                                final roomData =
+                                                                    jsonDecode(
+                                                                      response
+                                                                          .body,
+                                                                    );
+                                                                final String
+                                                                realRoomId =
+                                                                    roomData['room_id'];
+
+                                                                if (context
+                                                                    .mounted) {
+                                                                  Navigator.push(
+                                                                    context,
+                                                                    MaterialPageRoute(
+                                                                      builder: (context) => ChatScreen(
+                                                                        roomId:
+                                                                            realRoomId,
+                                                                        expertName:
+                                                                            expert['name'] ??
+                                                                            "Expert Mentor",
+                                                                      ),
+                                                                    ),
+                                                                  );
+                                                                }
+                                                              }
+                                                            } catch (e) {
+                                                              print(
+                                                                "Error initiating chat room: $e",
+                                                              );
+                                                            }
+                                                          },
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Expanded(
@@ -771,13 +777,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                           backgroundColor:
                                                               _uploadedFileUrl ==
                                                                   null
-                                                              ? Colors.grey[300]
+                                                              ? Colors.white12
                                                               : const Color(
-                                                                  0xFF0A66C2,
+                                                                  0xFFFF3131,
                                                                 ),
+                                                          disabledBackgroundColor:
+                                                              Colors.white12,
                                                           foregroundColor:
-                                                              Colors.white,
-                                                          elevation: 0,
+                                                              _uploadedFileUrl ==
+                                                                  null
+                                                              ? Colors.white38
+                                                              : Colors.white,
                                                           shape: RoundedRectangleBorder(
                                                             borderRadius:
                                                                 BorderRadius.circular(
