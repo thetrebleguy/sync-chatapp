@@ -7,6 +7,7 @@ import (
 	"sync"
 	"context"
 	"log"
+	"os"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -83,7 +84,7 @@ func HandleWebSockets(w http.ResponseWriter, r *http.Request) {
 						fmt.Println("DB Asynchronous Background Save Error:", err)
 					}
 
-					const targetDeviceToken := os.Getenv("TARGET_DEVICE_TOKEN")
+					targetDeviceToken := os.Getenv("TARGET_DEVICE_TOKEN")
 
 					if targetDeviceToken == "" {
 						fmt.Println("Warning: TARGET_DEVICE_TOKEN is empty in environment variables")

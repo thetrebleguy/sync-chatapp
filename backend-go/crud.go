@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"log"
 	
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 	"github.com/gin-gonic/gin"
 )
@@ -384,4 +386,44 @@ func GetChatHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, history)
+}
+
+func GetRoomDetails(c *gin.Context) {
+	roomID := c.Param("room_id")
+
+	var studentID, expertID string
+	var fileURL sql.NullString 
+
+	query := `
+		SELECT 
+			chat_rooms.student_id, 
+			chat_rooms.expert_id, 
+			review_request.file_url 
+		FROM chat_rooms
+		LEFT JOIN review_request 
+		  ON chat_rooms.student_id = review_request.student_id 
+		  AND chat_rooms.expert_id = review_request.expert_id
+		WHERE chat_rooms.room_id = $1
+		ORDER BY review_request.created_at DESC
+		LIMIT 1
+	`
+	err := db.QueryRow(query, roomID).Scan(&studentID, &expertID, &fileURL)
+	
+	if err != nil {
+		log.Printf("❌ Database query failed for room %s: %v", roomID, err)
+		
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Room not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"room_id":    roomID,
+		"student_id": studentID,
+		"expert_id":  expertID,
+		"file_url":   fileURL.String,
+	})
 }

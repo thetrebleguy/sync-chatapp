@@ -31,6 +31,7 @@ type CVSubmission struct {
 type ChatRoomRequest struct {
 	StudentID string `json:"student_id"`
 	ExpertID  string `json:"expert_id"`
+	FileURL   string `json:"file_url"`
 }
 
 type MessageRequest struct {
@@ -104,6 +105,7 @@ func main(){
 	r.GET("/experts", GetExperts)
 	r.GET("/expert-rooms/:expert_id", GetExpertChatRooms)
 	r.GET("/chat-history/:room_id", GetChatHistory)
+	r.GET("/rooms/:room_id", GetRoomDetails)
 
 
 	// 4. Start Server

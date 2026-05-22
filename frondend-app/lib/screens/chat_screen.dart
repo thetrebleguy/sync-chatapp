@@ -3,6 +3,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:overlay_support/overlay_support.dart';
 import 'package:hirewire/services/socket_services.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:hirewire/utils/constants.dart';
@@ -25,6 +26,7 @@ class _ChatScreenState extends State<ChatScreen> {
   WebSocketChannel? _channel;
   String? _myUserId;
   bool _isLoading = true;
+  String? _uploadedDocUrl;
 
   @override
   void initState() {
@@ -70,10 +72,20 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.add({
             "sender_id": msg["sender_id"],
             "content": msg["content"],
-            // cast to string to prevent int-vs-string mismatch comparison bugs
             "is_me": msg["sender_id"].toString() == _myUserId.toString(),
           });
         }
+      }
+
+      final roomResponse = await http.get(
+        Uri.parse("${API.baseUrl}/rooms/${widget.roomId}"),
+      );
+
+      if (roomResponse.statusCode == 200) {
+        final Map<String, dynamic> roomData = jsonDecode(roomResponse.body);
+        setState(() {
+          _uploadedDocUrl = roomData["file_url"];
+        });
       }
     } catch (e) {
       print("Error loading database message history: $e");
@@ -86,23 +98,27 @@ class _ChatScreenState extends State<ChatScreen> {
     _channel!.stream.listen((message) {
       final data = jsonDecode(message);
       final senderId = data["sender_id"]?.toString();
-      final isNotMe = senderId != _myUserId.toString();
+
+      if (senderId == _myUserId.toString()) {
+        return;
+      }
 
       setState(() {
         _messages.add({
           "sender_id": data["sender_id"],
           "content": data["content"],
-          "is_me": !isNotMe,
+          "is_me": false,
         });
       });
 
-      // instantly glide down to the newest text block
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }, onError: (err) => print("Socket Channel Error: $err"));
 
     setState(() {
       _isLoading = false;
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   void _sendMessage() {
@@ -117,7 +133,104 @@ class _ChatScreenState extends State<ChatScreen> {
     };
 
     _channel!.sink.add(jsonEncode(messagePayload));
+
+    setState(() {
+      _messages.add({
+        "sender_id": _myUserId,
+        "content": messageText,
+        "is_me": true,
+      });
+    });
+
     _messageController.clear();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  void _openDocumentViewer(BuildContext context, String url) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          // Expands nicely to cover 80% of the screen for an actual readable document view
+          height: MediaQuery.of(context).size.height * 0.80,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Grab Handle
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              // Header Layout
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf, color: Color(0xFFD93025)),
+                        SizedBox(width: 8),
+                        Text(
+                          "Live Document Preview",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              // 🎯 THE LIVE RENDERING PDF ENGINE VIEWPORT
+              Expanded(
+                child: Container(
+                  color: Colors.grey[100],
+                  child: SfPdfViewer.network(
+                    url,
+                    canShowScrollHead: true,
+                    canShowScrollStatus: true,
+                    // Shows a clean native loading bar while downloading from Supabase storage bucket
+                    onDocumentLoadFailed:
+                        (PdfDocumentLoadFailedDetails details) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "Failed to render PDF: ${details.description}",
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -135,6 +248,24 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         foregroundColor: Colors.black,
+
+        actions: [
+          if (_uploadedDocUrl != null && _uploadedDocUrl!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: Color(0xFFD93025),
+                  size: 28,
+                ),
+                tooltip: "Review Uploaded Document",
+                onPressed: () {
+                  _openDocumentViewer(context, _uploadedDocUrl!);
+                },
+              ),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -185,7 +316,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 SafeArea(
-                  top: false, // We only care about the bottom screen edge here
+                  top: false,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -193,10 +324,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     color: Colors.white,
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment
+                          .end, // 🎯 Align button to bottom as field grows
                       children: [
                         Expanded(
                           child: TextField(
                             controller: _messageController,
+                            minLines: 1,
+                            maxLines: 4,
+                            keyboardType: TextInputType.multiline,
                             decoration: InputDecoration(
                               hintText: "Write your message here...",
                               border: OutlineInputBorder(
@@ -205,8 +341,12 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               fillColor: Colors.grey[100],
                               filled: true,
+                              isDense:
+                                  true, // Allows vertical expansion without padding pops
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
+                                vertical:
+                                    10, // Gives a clean height balance for multi-lines
                               ),
                             ),
                           ),

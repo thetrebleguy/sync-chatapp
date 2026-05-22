@@ -10,6 +10,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -30,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   List<dynamic> _experts = [];
   bool _isLoadingExperts = true;
+  bool _isProcessing = false;
 
   final SocketService _socketService = SocketService();
 
@@ -672,11 +674,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               Row(
                                                 children: [
                                                   IconButton(
-                                                    icon: const Icon(
+                                                    icon: Icon(
                                                       Icons.chat_bubble_outline,
-                                                      color: Color(0xFF0A66C2),
+                                                      color:
+                                                          _uploadedFileUrl ==
+                                                              null
+                                                          ? Colors.grey
+                                                          : const Color(
+                                                              0xFF0A66C2,
+                                                            ),
                                                     ),
                                                     onPressed: () async {
+                                                      if (_uploadedFileUrl ==
+                                                          null) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text(
+                                                              "Please select and upload your PDF Resume to the vault first!",
+                                                            ),
+                                                            backgroundColor:
+                                                                Colors.orange,
+                                                          ),
+                                                        );
+                                                        return;
+                                                      }
+
                                                       final userId =
                                                           await storage.read(
                                                             key: 'user_id',
@@ -699,6 +723,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                             "expert_id":
                                                                 expert['id']
                                                                     .toString(),
+                                                            "file_url":
+                                                                _uploadedFileUrl,
                                                           }),
                                                         );
 
